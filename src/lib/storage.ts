@@ -24,7 +24,15 @@ export function loadData(): AppData {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...emptyData };
     const parsed = JSON.parse(raw) as Partial<AppData>;
-    return { ...emptyData, ...parsed };
+    const merged = { ...emptyData, ...parsed };
+    // Deduplicate pets by id — if duplicate IDs exist, keep the last one.
+    const seen = new Set<string>();
+    merged.pets = [...merged.pets].reverse().filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    }).reverse();
+    return merged;
   } catch {
     return { ...emptyData };
   }

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import type { Pet } from '@/types';
 import { uid } from '@/lib/storage';
@@ -28,6 +28,22 @@ export function PetProvider({ children }: { children: React.ReactNode }) {
     [data.pets, user]
   );
 
+  // Validate the stored active pet id on mount / when pets change.
+  // If it's stale or missing, fall back to the first available pet.
+  useEffect(() => {
+    if (!user) return;
+    if (pets.length === 0) {
+      if (activePetId !== null) setActivePetIdState(null);
+      return;
+    }
+    const exists = pets.some((p) => p.id === activePetId);
+    if (!exists) {
+      const fallback = pets[0].id;
+      setActivePetIdState(fallback);
+      localStorage.setItem(ACTIVE_PET_KEY, fallback);
+    }
+  }, [user, pets, activePetId]);
+
   const setActivePetId = useCallback((id: string | null) => {
     setActivePetIdState(id);
     if (id) localStorage.setItem(ACTIVE_PET_KEY, id);
@@ -41,9 +57,15 @@ export function PetProvider({ children }: { children: React.ReactNode }) {
 
   const addPet = useCallback(
     (pet: Omit<Pet, 'id' | 'ownerId' | 'createdAt'>) => {
+      // Always generate a fresh, unique id and append — never overwrite.
+      let newId = uid();
+      // Guard against the astronomically unlikely id collision.
+      while (data.pets.some((p) => p.id === newId)) {
+        newId = uid();
+      }
       const newPet: Pet = {
         ...pet,
-        id: uid(),
+        id: newId,
         ownerId: user!.id,
         createdAt: Date.now(),
       };
@@ -51,7 +73,7 @@ export function PetProvider({ children }: { children: React.ReactNode }) {
       setActivePetId(newPet.id);
       return newPet;
     },
-    [user, setData, setActivePetId]
+    [user, data.pets, setData, setActivePetId]
   );
 
   const updatePet = useCallback(
